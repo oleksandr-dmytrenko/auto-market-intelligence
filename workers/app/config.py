@@ -12,9 +12,6 @@ PROVIDERS = {
     "iaai": {
         "enabled": True,
     },
-    "bidfax": {
-        "enabled": False,
-    },
 }
 
 

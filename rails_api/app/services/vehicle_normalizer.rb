@@ -1,8 +1,10 @@
 class VehicleNormalizer
   def self.normalize(vehicle_data)
-    {
+    normalized = {
       source: vehicle_data['source'] || vehicle_data[:source],
       source_id: vehicle_data['source_id'] || vehicle_data[:source_id],
+      lot_id: vehicle_data['lot_id'] || vehicle_data[:source_id], # По умолчанию используем source_id
+      stock_number: vehicle_data['stock_number'] || vehicle_data[:stock_number],
       make: normalize_make(vehicle_data['make'] || vehicle_data[:make]),
       model: normalize_model(vehicle_data['model'] || vehicle_data[:model]),
       year: normalize_year(vehicle_data['year'] || vehicle_data[:year]),
@@ -17,12 +19,28 @@ class VehicleNormalizer
       auction_status: vehicle_data['auction_status'] || vehicle_data[:auction_status] || 'completed',
       auction_end_date: normalize_timestamp(vehicle_data['auction_end_date'] || vehicle_data[:auction_end_date]),
       vin: normalize_vin(vehicle_data['vin'] || vehicle_data[:vin]),
+      image_urls: normalize_image_urls(vehicle_data['images'] || vehicle_data[:images] || []),
       raw_data: {
         'vin' => vehicle_data['vin'] || vehicle_data[:vin],
         'images' => vehicle_data['images'] || vehicle_data[:images] || [],
-        'title' => vehicle_data['raw_data']&.dig('title') || vehicle_data[:raw_data]&.dig('title')
+        'title' => vehicle_data['raw_data']&.dig('title') || vehicle_data[:raw_data]&.dig('title'),
+        'stock_number' => vehicle_data['stock_number'] || vehicle_data[:stock_number]
       }.merge(vehicle_data['raw_data'] || vehicle_data[:raw_data] || {})
     }
+    
+    # Извлекаем partial VIN из полного VIN или из raw_data
+    vin = normalized[:vin]
+    if vin.present? && vin.length >= 11
+      normalized[:partial_vin] = vin[0..11] # Первые 12 символов (indices 0-11)
+    elsif vehicle_data['partial_vin'] || vehicle_data[:partial_vin]
+      normalized[:partial_vin] = normalize_partial_vin(vehicle_data['partial_vin'] || vehicle_data[:partial_vin])
+    end
+    
+    # Генерируем mileage_bucket и vehicle_fingerprint
+    normalized[:mileage_bucket] = VehicleFingerprint.mileage_bucket(normalized[:mileage])
+    normalized[:vehicle_fingerprint] = VehicleFingerprint.generate(normalized)
+    
+    normalized
   end
 
   private
@@ -91,5 +109,35 @@ class VehicleNormalizer
   rescue
     nil
   end
+
+  def self.normalize_image_urls(value)
+    return [] if value.blank?
+    
+    # Если это массив, обрабатываем каждый элемент
+    if value.is_a?(Array)
+      urls = value.map do |url|
+        url.to_s.strip
+      end.compact.reject(&:blank?).uniq
+      
+      # Фильтруем только валидные URL
+      urls.select { |url| url.match?(/\Ahttps?:\/\/.+\z/) }
+    else
+      # Если это строка, пробуем разбить по запятой или пробелу
+      urls = value.to_s.split(/[,\s]+/).map(&:strip).compact.reject(&:blank?).uniq
+      urls.select { |url| url.match?(/\Ahttps?:\/\/.+\z/) }
+    end
+  rescue
+    []
+  end
+  
+  def self.normalize_partial_vin(value)
+    return nil if value.blank?
+    partial_vin = value.to_s.upcase.strip.gsub(/[^A-HJ-NPR-Z0-9]/, '')
+    # Partial VIN обычно 11-13 символов
+    partial_vin.length >= 11 ? partial_vin[0..12] : nil
+  rescue
+    nil
+  end
 end
+
 

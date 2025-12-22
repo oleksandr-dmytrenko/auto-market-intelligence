@@ -13,3 +13,27 @@ production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+  
+  # Periodic recheck для T-1/T/T+1 проверок
+  periodic_recheck_t_minus_1:
+    command: "python -m workers.periodic_recheck_worker --mode daily"
+    schedule: at 1am every day
+  
+  periodic_recheck_t:
+    command: "python -m workers.periodic_recheck_worker --mode daily"
+    schedule: at 2am every day
+  
+  periodic_recheck_t_plus_1:
+    command: "python -m workers.periodic_recheck_worker --mode daily"
+    schedule: at 3am every day
+  
+  # Обработка очереди проверок каждые 30 минут
+  process_recheck_queue:
+    command: "python -m workers.periodic_recheck_worker --mode queue --max-items 50"
+    schedule: every 30 minutes
+
+development:
+  # В development режиме запускаем реже
+  process_recheck_queue:
+    command: "python -m workers.periodic_recheck_worker --mode queue --max-items 10"
+    schedule: every hour

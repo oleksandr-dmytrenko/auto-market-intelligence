@@ -333,19 +333,36 @@ class IAAIParser:
         """
         soup = BeautifulSoup(html, 'html.parser')
         
+        source_id = IAAIParser._extract_source_id(detail_url)
         data = {
             'source': 'iaai',
-            'source_id': IAAIParser._extract_source_id(detail_url),
+            'source_id': source_id,
+            'lot_id': source_id,  # lot_id совпадает с source_id для IAAI
             'auction_url': detail_url,
             'auction_status': 'active',  # IAAI обычно показывает активные аукционы
             'raw_data': {}
         }
         
-        # Извлекаем VIN
+        # Извлекаем Stock #
+        stock_number = IAAIParser._extract_stock_number(soup)
+        if stock_number:
+            data['stock_number'] = stock_number
+            data['raw_data']['stock_number'] = stock_number
+        
+        # Извлекаем VIN (полный или partial)
         vin = IAAIParser._extract_vin(soup)
         if vin:
             data['vin'] = vin
             data['raw_data']['vin'] = vin
+        
+        # Извлекаем partial VIN отдельно
+        partial_vin = IAAIParser._extract_partial_vin(soup)
+        if partial_vin:
+            data['partial_vin'] = partial_vin
+            data['raw_data']['partial_vin'] = partial_vin
+        elif vin and len(vin) >= 11:
+            # Если есть полный VIN, извлекаем partial из него
+            data['partial_vin'] = vin[0:13]
         
         # Извлекаем заголовок (обычно содержит make, model, year)
         title = IAAIParser._extract_title(soup)
@@ -431,8 +448,43 @@ class IAAIParser:
         return last_part
     
     @staticmethod
+    def _extract_stock_number(soup: BeautifulSoup) -> Optional[str]:
+        """Извлекает Stock # из HTML"""
+        # Ищем по label "Stock #:"
+        stock_labels = soup.find_all(string=re.compile(r'Stock\s*#\s*:', re.I))
+        for label in stock_labels:
+            parent = label.parent
+            if parent:
+                # Ищем значение в следующем sibling или в том же элементе
+                value_elem = parent.find_next_sibling(class_=re.compile(r'value|data-list__value', re.I))
+                if not value_elem:
+                    value_elem = parent.find('span', class_=re.compile(r'value|data-list__value', re.I))
+                if not value_elem:
+                    # Пробуем найти следующий элемент с классом text-bold
+                    value_elem = parent.find_next('span', class_=re.compile(r'text-bold|bold', re.I))
+                
+                if value_elem:
+                    stock_text = value_elem.get_text(strip=True)
+                    # Stock # обычно числовой
+                    if stock_text and re.match(r'^\d+$', stock_text):
+                        return stock_text
+        
+        # Альтернативный поиск: ищем в data-list элементах
+        data_list_items = soup.find_all('li', class_=re.compile(r'data-list__item', re.I))
+        for item in data_list_items:
+            label = item.find('span', class_=re.compile(r'data-list__label', re.I))
+            if label and re.search(r'Stock\s*#', label.get_text(), re.I):
+                value = item.find('span', class_=re.compile(r'data-list__value', re.I))
+                if value:
+                    stock_text = value.get_text(strip=True)
+                    if stock_text and re.match(r'^\d+$', stock_text):
+                        return stock_text
+        
+        return None
+    
+    @staticmethod
     def _extract_vin(soup: BeautifulSoup) -> Optional[str]:
-        """Извлекает VIN номер"""
+        """Извлекает VIN номер (полный или partial)"""
         # Ищем VIN в тексте (обычно 17 символов)
         text = soup.get_text()
         vin_pattern = r'\b([A-HJ-NPR-Z0-9]{17})\b'
@@ -448,8 +500,53 @@ class IAAIParser:
                 next_sibling = parent.find_next_sibling()
                 if next_sibling:
                     vin_text = next_sibling.get_text(strip=True)
+                    # Проверяем полный VIN (17 символов)
                     if re.match(r'^[A-HJ-NPR-Z0-9]{17}$', vin_text):
                         return vin_text
+                    # Проверяем partial VIN (11-13 символов, может быть с маскировкой)
+                    partial_match = re.match(r'^([A-HJ-NPR-Z0-9]{11,13})', vin_text.replace('*', ''))
+                    if partial_match:
+                        return partial_match.group(1)
+        
+        # Ищем partial VIN с маскировкой (например: 1FMCU0G76FU******)
+        partial_vin_pattern = r'\b([A-HJ-NPR-Z0-9]{11,13})\*+\b'
+        match = re.search(partial_vin_pattern, text)
+        if match:
+            return match.group(1)
+        
+        return None
+    
+    @staticmethod
+    def _extract_partial_vin(soup: BeautifulSoup) -> Optional[str]:
+        """Извлекает partial VIN (первые видимые символы)"""
+        # Сначала пробуем извлечь полный VIN
+        vin = IAAIParser._extract_vin(soup)
+        if vin:
+            # Если VIN полный (17 символов), возвращаем первые 13
+            if len(vin) >= 17:
+                return vin[0:13]
+            # Если уже partial (11-13 символов), возвращаем как есть
+            if len(vin) >= 11:
+                return vin[0:13]
+        
+        # Ищем partial VIN с маскировкой в HTML
+        text = soup.get_text()
+        # Паттерн для partial VIN с маскировкой: 1FMCU0G76FU******
+        partial_pattern = r'\b([A-HJ-NPR-Z0-9]{11,13})\*+\b'
+        match = re.search(partial_pattern, text)
+        if match:
+            return match.group(1)
+        
+        # Ищем в полях VIN с маскировкой
+        vin_elements = soup.find_all(string=re.compile(r'VIN', re.I))
+        for elem in vin_elements:
+            parent = elem.parent
+            if parent:
+                vin_text = parent.get_text()
+                # Ищем partial VIN в тексте
+                partial_match = re.search(r'([A-HJ-NPR-Z0-9]{11,13})\*+', vin_text)
+                if partial_match:
+                    return partial_match.group(1)
         
         return None
     

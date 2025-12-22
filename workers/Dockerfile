@@ -17,3 +17,5 @@ CMD ["rq", "worker", "-u", "redis://redis:6379/0", "ingest", "similarity"]
 
 
 
+
+

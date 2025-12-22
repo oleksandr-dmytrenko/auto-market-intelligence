@@ -7,7 +7,8 @@ RUN apk add --no-cache \
     nodejs \
     yarn \
     tzdata \
-    yaml-dev
+    yaml-dev \
+    bash
 
 WORKDIR /app
 

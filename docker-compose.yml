@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U car_bot"]
+      test: ["CMD-SHELL", "pg_isready -U car_bot -d car_bot_development"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -81,6 +81,8 @@ services:
       RAILS_ENV: development
     volumes:
       - ./rails_api:/app
+      - ./mini_app:/mini_app
+      - .:/workspace:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,10 +102,14 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       RAILS_API_URL: http://rails_api:3000
+      REDIS_URL: redis://redis:6379/0
+      MINI_APP_URL: ${MINI_APP_URL:-https://03c85b9da6bc.ngrok-free.app/mini-app}
     volumes:
       - ./telegram_bot:/app
+      - .:/workspace:ro
     depends_on:
       - rails_api
+      - redis
     restart: unless-stopped
 
   python_workers:
@@ -125,6 +131,7 @@ services:
       PROXY_PASSWORD: ${PROXY_PASSWORD:-}
     volumes:
       - ./python_workers:/app
+      - .:/workspace:ro
     depends_on:
       - redis
       - kafka
@@ -138,7 +145,7 @@ services:
       context: ./rails_api
       dockerfile: Dockerfile
     container_name: car_bot_kafka_consumer
-    command: sh -c "bundle exec rails db:prepare && bundle exec rake kafka:consumer"
+    command: sh -c "bundle install && bundle exec rails db:prepare && bundle exec rake kafka:consumer"
     environment:
       DATABASE_URL: postgresql://car_bot:car_bot_password@postgres:5432/car_bot_development
       REDIS_URL: redis://redis:6379/0
@@ -147,6 +154,7 @@ services:
       RAILS_ENV: development
     volumes:
       - ./rails_api:/app
+      - .:/workspace:ro
     depends_on:
       postgres:
         condition: service_healthy

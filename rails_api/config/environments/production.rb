@@ -45,7 +45,7 @@ Rails.application.configure do
 
   # Use Redis for caching
   redis_url = ENV.fetch('REDIS_URL', 'redis://redis:6379/1')
-  config.cache_store = :redis_cache_store, url: redis_url
+  config.cache_store = :redis_cache_store, { url: redis_url }
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.

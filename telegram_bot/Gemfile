@@ -5,4 +5,10 @@ ruby '~> 3.2.0'
 gem 'telegram-bot-ruby', '~> 1.0'
 gem 'httparty', '~> 0.21'
 gem 'dotenv', '~> 2.8'
+gem 'redis', '~> 5.0'
+gem 'json', '~> 2.6'
+
+group :test do
+  gem 'rspec', '~> 3.12'
+end
 

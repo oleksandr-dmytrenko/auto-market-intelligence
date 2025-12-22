@@ -8,9 +8,8 @@ class PriceCalculator
     cached = Rails.cache.read(cache_key)
     return cached if cached
     
-    # Search only in Bidfax completed auctions (historical data)
-    vehicles = Vehicle.from_bidfax
-                      .completed_auctions
+    # Search in completed auctions from IAAI and Copart (historical data)
+    vehicles = Vehicle.completed_auctions
                       .by_make_model_year(
                         filters[:make],
                         filters[:model],

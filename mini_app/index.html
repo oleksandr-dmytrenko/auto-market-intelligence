@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#3390ec">
+    <title>Auto Market Intelligence</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="/mini-app/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Loading screen -->
+        <div id="loading" class="screen active">
+            <div class="loader"></div>
+            <p>Загрузка...</p>
+        </div>
+
+        <!-- Search screen -->
+        <div id="search-screen" class="screen">
+            <div class="container">
+                <h1>🔍 Подбор автомобиля</h1>
+                
+                <form id="search-form" class="search-form">
+                    <div class="form-group">
+                        <label for="make">Марка</label>
+                        <select id="make" required>
+                            <option value="">Выберите марку</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model">Модель</label>
+                        <select id="model" required disabled>
+                            <option value="">Сначала выберите марку</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="year_from">Год от</label>
+                            <input type="number" id="year_from" min="1900" max="2025" placeholder="2015">
+                        </div>
+                        <div class="form-group">
+                            <label for="year_to">Год до</label>
+                            <input type="number" id="year_to" min="1900" max="2025" placeholder="2024">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mileage_from">Пробег от (миль)</label>
+                            <input type="number" id="mileage_from" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="mileage_to">Пробег до (миль)</label>
+                            <input type="number" id="mileage_to" min="0" placeholder="100000">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="search-btn">
+                        🔍 Найти автомобили
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results screen -->
+        <div id="results-screen" class="screen">
+            <div class="container">
+                <div class="header">
+                    <button class="btn-back" onclick="showSearchScreen()">← Назад</button>
+                    <h2>Результаты поиска</h2>
+                </div>
+                <div id="results-list" class="results-list">
+                    <!-- Results will be inserted here -->
+                </div>
+                <div id="no-results" class="no-results" style="display: none;">
+                    <p>По вашему запросу ничего не найдено.</p>
+                    <button class="btn btn-secondary" onclick="showSearchScreen()">Новый поиск</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vehicle details screen -->
+        <div id="vehicle-screen" class="screen">
+            <div class="container">
+                <div class="header">
+                    <button class="btn-back" onclick="showResultsScreen()">← Назад</button>
+                    <h2>Детали лота</h2>
+                </div>
+                <div id="vehicle-details">
+                    <!-- Vehicle details will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment screen -->
+        <div id="payment-screen" class="screen">
+            <div class="container">
+                <div class="header">
+                    <button class="btn-back" onclick="goBackFromPayment()">← Назад</button>
+                    <h2>Оплата</h2>
+                </div>
+                <div id="payment-content">
+                    <!-- Payment content will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/mini-app/app.js"></script>
+</body>
+</html>
+

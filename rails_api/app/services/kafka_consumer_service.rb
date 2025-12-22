@@ -2,9 +2,10 @@ require 'kafka'
 require 'telegram/bot'
 
 class KafkaConsumerService
-  BIDFAX_DATA_TOPIC = 'bidfax-vehicle-data'
   ACTIVE_AUCTION_DATA_TOPIC = 'active-auction-data'
   IAAI_DATA_TOPIC = 'iaai-vehicle-data'
+  HISTORICAL_VEHICLE_DATA_TOPIC = 'historical-vehicle-data'
+  AUCTION_STATUS_UPDATES_TOPIC = 'auction-status-updates'
 
   def self.start
     new.start
@@ -17,12 +18,13 @@ class KafkaConsumerService
   end
 
   def start
-    Rails.logger.info "Starting Kafka consumers for topics: #{BIDFAX_DATA_TOPIC}, #{ACTIVE_AUCTION_DATA_TOPIC}, #{IAAI_DATA_TOPIC}"
+    Rails.logger.info "Starting Kafka consumers for topics: #{ACTIVE_AUCTION_DATA_TOPIC}, #{IAAI_DATA_TOPIC}, #{HISTORICAL_VEHICLE_DATA_TOPIC}, #{AUCTION_STATUS_UPDATES_TOPIC}"
 
     consumer = @kafka.consumer(group_id: 'rails-api-consumers')
-    consumer.subscribe(BIDFAX_DATA_TOPIC)
     consumer.subscribe(ACTIVE_AUCTION_DATA_TOPIC)
     consumer.subscribe(IAAI_DATA_TOPIC)
+    consumer.subscribe(HISTORICAL_VEHICLE_DATA_TOPIC)
+    consumer.subscribe(AUCTION_STATUS_UPDATES_TOPIC)
 
     begin
       consumer.each_message do |message|
@@ -44,32 +46,18 @@ class KafkaConsumerService
     topic = message.topic
 
     case topic
-    when BIDFAX_DATA_TOPIC
-      process_bidfax_data(data)
     when ACTIVE_AUCTION_DATA_TOPIC
       process_active_auction_data(data)
     when IAAI_DATA_TOPIC
       process_iaai_data(data)
+    when HISTORICAL_VEHICLE_DATA_TOPIC
+      process_historical_vehicle_data(data)
+    when AUCTION_STATUS_UPDATES_TOPIC
+      process_auction_status_updates(data)
     end
   rescue => e
     Rails.logger.error "Error processing message from #{topic}: #{e.message}"
     Rails.logger.error e.backtrace.join("\n")
-  end
-
-  # Обработка данных из Bidfax - сохраняем в БД для статистики
-  def process_bidfax_data(data)
-    raw_vehicles = data['vehicles'] || []
-    Rails.logger.info "Processing #{raw_vehicles.size} Bidfax vehicles"
-
-    normalized = raw_vehicles.map { |v| VehicleNormalizer.normalize(v) }
-    
-    ActiveRecord::Base.transaction do
-      normalized.each do |vehicle_data|
-        save_vehicle(vehicle_data.merge(auction_status: 'completed'))
-      end
-    end
-
-    Rails.logger.info "Saved #{normalized.size} Bidfax vehicles"
   end
 
   # Обработка данных из IAAI - сохраняем в БД
@@ -113,16 +101,28 @@ class KafkaConsumerService
   end
 
   def save_vehicle(vehicle_data)
-    vehicle = Vehicle.find_or_initialize_by(
-      source: vehicle_data[:source],
-      source_id: vehicle_data[:source_id]
-    )
+    # Используем stock_number для уникальности, если доступен, иначе source_id
+    if vehicle_data[:stock_number].present?
+      vehicle = Vehicle.find_or_initialize_by(
+        source: vehicle_data[:source],
+        stock_number: vehicle_data[:stock_number]
+      )
+    else
+      vehicle = Vehicle.find_or_initialize_by(
+        source: vehicle_data[:source],
+        source_id: vehicle_data[:source_id]
+      )
+    end
 
     vehicle.assign_attributes(
+      source_id: vehicle_data[:source_id],
+      lot_id: vehicle_data[:lot_id] || vehicle_data[:source_id],
+      stock_number: vehicle_data[:stock_number],
       make: vehicle_data[:make],
       model: vehicle_data[:model],
       year: vehicle_data[:year],
       mileage: vehicle_data[:mileage],
+      mileage_bucket: vehicle_data[:mileage_bucket],
       color: vehicle_data[:color],
       damage_type: vehicle_data[:damage_type],
       production_year: vehicle_data[:production_year],
@@ -133,6 +133,9 @@ class KafkaConsumerService
       auction_end_date: vehicle_data[:auction_end_date],
       final_price: vehicle_data[:final_price],
       vin: vehicle_data[:vin],
+      partial_vin: vehicle_data[:partial_vin],
+      vehicle_fingerprint: vehicle_data[:vehicle_fingerprint],
+      image_urls: vehicle_data[:image_urls] || [],
       raw_data: vehicle_data[:raw_data] || {},
       normalized_at: Time.current
     )
@@ -184,6 +187,63 @@ class KafkaConsumerService
     end
     
     text
+  end
+
+  # Обработка исторических данных - сохраняем в БД со статусом 'completed'
+  def process_historical_vehicle_data(data)
+    raw_vehicles = data['vehicles'] || []
+    source = data['source'] || 'historical_scraper'
+    timestamp = data['timestamp']
+    
+    Rails.logger.info "Processing #{raw_vehicles.size} historical vehicles from #{source} (timestamp: #{timestamp})"
+
+    normalized = raw_vehicles.map { |v| VehicleNormalizer.normalize(v) }
+    
+    ActiveRecord::Base.transaction do
+      normalized.each do |vehicle_data|
+        # Исторические данные всегда имеют статус 'completed'
+        save_vehicle(vehicle_data.merge(auction_status: 'completed'))
+      end
+    end
+
+    Rails.logger.info "Saved #{normalized.size} historical vehicles"
+  end
+
+  # Обработка обновлений статусов аукционов
+  def process_auction_status_updates(data)
+    updates = data['updates'] || []
+    source = data['source'] || 'auction_status_tracker'
+    timestamp = data['timestamp']
+    
+    Rails.logger.info "Processing #{updates.size} auction status updates from #{source} (timestamp: #{timestamp})"
+
+    ActiveRecord::Base.transaction do
+      updates.each do |update_data|
+        source_name = update_data['source'] || 'iaai'
+        source_id = update_data['source_id']
+        auction_status = update_data['auction_status']
+        final_price = update_data['final_price']
+        auction_end_date = update_data['auction_end_date']
+        
+        next unless source_id && auction_status
+        
+        vehicle = Vehicle.find_by(source: source_name, source_id: source_id)
+        
+        if vehicle
+          vehicle.update!(
+            auction_status: auction_status,
+            final_price: final_price || vehicle.final_price,
+            auction_end_date: auction_end_date ? Time.at(auction_end_date) : vehicle.auction_end_date,
+            updated_at: Time.current
+          )
+          Rails.logger.info "Updated vehicle #{source_name}:#{source_id} - status: #{auction_status}, final_price: #{final_price}"
+        else
+          Rails.logger.warn "Vehicle not found: #{source_name}:#{source_id}"
+        end
+      end
+    end
+
+    Rails.logger.info "Processed #{updates.size} auction status updates"
   end
 
   def format_number(num)

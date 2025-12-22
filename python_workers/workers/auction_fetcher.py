@@ -28,6 +28,8 @@ except ImportError:
     FAKE_USERAGENT_AVAILABLE = False
     print("Warning: fake-useragent not available. Install with: pip install fake-useragent")
 
+from .iaai_scraper import IAAIScraper
+
 class AuctionFetcher:
     """Fetches auction listings with Cloudflare bypass"""
     
@@ -303,8 +305,6 @@ class AuctionFetcher:
         Fetch active listings from IAAI
         Uses cloudscraper (primary) and Selenium (fallback) with polite delays
         """
-        from .iaai_scraper import IAAIScraper
-        
         key = 'rate_limit:scraper:iaai'
         
         if self.rate_limiter.wait_if_needed(key):
@@ -336,8 +336,6 @@ class AuctionFetcher:
         Returns:
             Список всех найденных автомобилей
         """
-        from .iaai_scraper import IAAIScraper
-        
         key = 'rate_limit:scraper:iaai'
         
         if self.rate_limiter.wait_if_needed(key):

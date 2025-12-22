@@ -10,4 +10,6 @@ python-dotenv==1.0.0
 selenium-stealth==1.0.6
 fake-useragent==1.4.0
 playwright==1.40.0
+pytest==7.4.3
+pytest-mock==3.12.0
 

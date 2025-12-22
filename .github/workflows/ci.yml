@@ -1,0 +1,227 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+# Cancel in-progress runs for the same workflow and ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rails-api-tests:
+    name: Rails API Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: car_bot
+          POSTGRES_PASSWORD: car_bot_password
+          POSTGRES_DB: car_bot_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    env:
+      DATABASE_URL: postgresql://car_bot:car_bot_password@localhost:5432/car_bot_test
+      RAILS_ENV: test
+      REDIS_URL: redis://localhost:6379/0
+      RAILS_MAX_THREADS: 1
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: rails_api
+      
+      - name: Setup database
+        working-directory: rails_api
+        run: bundle exec rails db:test:prepare
+      
+      - name: Create tmp directory
+        working-directory: rails_api
+        run: mkdir -p tmp
+      
+      - name: Run RSpec tests
+        working-directory: rails_api
+        continue-on-error: false
+        run: |
+          bundle exec rspec --format progress \
+            --format RspecJunitFormatter \
+            --out tmp/rspec.xml 2>/dev/null || \
+          bundle exec rspec --format progress
+      
+      - name: Upload RSpec test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rspec-results
+          path: rails_api/tmp/rspec.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  python-workers-tests:
+    name: Python Workers Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: python_workers/requirements.txt
+      
+      - name: Install dependencies
+        working-directory: python_workers
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov || echo "pytest-cov not available, skipping coverage"
+      
+      - name: Run pytest tests
+        working-directory: python_workers
+        continue-on-error: false
+        run: |
+          pytest --junitxml=test-results.xml \
+            --cov=workers \
+            --cov-report=xml \
+            --cov-report=term 2>/dev/null || \
+          pytest --junitxml=test-results.xml
+      
+      - name: Upload pytest test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: python_workers/test-results.xml
+          retention-days: 7
+          if-no-files-found: ignore
+      
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-coverage
+          path: python_workers/coverage.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  telegram-bot-tests:
+    name: Telegram Bot Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    env:
+      REDIS_URL: redis://localhost:6379/0
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: telegram_bot
+      
+      - name: Create tmp directory
+        working-directory: telegram_bot
+        run: mkdir -p tmp
+      
+      - name: Run RSpec tests
+        working-directory: telegram_bot
+        continue-on-error: false
+        run: |
+          bundle exec rspec --format progress \
+            --format RspecJunitFormatter \
+            --out tmp/rspec.xml 2>/dev/null || \
+          bundle exec rspec --format progress
+      
+      - name: Upload RSpec test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-bot-rspec-results
+          path: telegram_bot/tmp/rspec.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  mini-app-tests:
+    name: Mini App Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: mini_app/package.json
+      
+      - name: Install dependencies
+        working-directory: mini_app
+        run: npm ci
+      
+      - name: Run Jest tests
+        working-directory: mini_app
+        continue-on-error: false
+        run: |
+          npm test -- --coverage \
+            --coverageReporters=json-summary \
+            --coverageReporters=text \
+            --coverageReporters=lcov
+      
+      - name: Upload Jest test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-coverage
+          path: mini_app/coverage
+          retention-days: 7
+
