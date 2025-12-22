@@ -1,0 +1,15 @@
+FROM ruby:3.2-alpine
+
+RUN apk add --no-cache \
+    build-base \
+    git
+
+WORKDIR /app
+
+COPY Gemfile ./
+RUN bundle install
+
+COPY . .
+
+CMD ["ruby", "lib/bot.rb"]
+

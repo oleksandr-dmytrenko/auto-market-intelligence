@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+vendor/bundle/
+
+# Environment variables
+.env
+.env.local
+
+# Database
+*.sqlite3
+*.sqlite3-journal
+
+# Logs
+*.log
+log/
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+.dockerignore
+
+# Rails
+rails_api/tmp/
+rails_api/log/
+rails_api/.byebug_history
+
+# Python
+python_workers/__pycache__/
+python_workers/*.pyc
+python_workers/.pytest_cache/
+python_workers/venv/
+
+
+
+

@@ -1,0 +1,8 @@
+source 'https://rubygems.org'
+
+ruby '~> 3.2.0'
+
+gem 'telegram-bot-ruby', '~> 1.0'
+gem 'httparty', '~> 0.21'
+gem 'dotenv', '~> 2.8'
+

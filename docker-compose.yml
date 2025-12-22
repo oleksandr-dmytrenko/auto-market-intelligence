@@ -1,0 +1,163 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: car_bot_postgres
+    environment:
+      POSTGRES_USER: car_bot
+      POSTGRES_PASSWORD: car_bot_password
+      POSTGRES_DB: car_bot_development
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U car_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: car_bot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: car_bot_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: car_bot_kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rails_api:
+    build:
+      context: ./rails_api
+      dockerfile: Dockerfile
+    container_name: car_bot_rails_api
+    command: bundle exec rails s -b 0.0.0.0
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://car_bot:car_bot_password@postgres:5432/car_bot_development
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BROKERS: kafka:29092
+      RAILS_ENV: development
+    volumes:
+      - ./rails_api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+
+
+  telegram_bot:
+    build:
+      context: ./telegram_bot
+      dockerfile: Dockerfile
+    container_name: car_bot_telegram
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      RAILS_API_URL: http://rails_api:3000
+    volumes:
+      - ./telegram_bot:/app
+    depends_on:
+      - rails_api
+    restart: unless-stopped
+
+  python_workers:
+    build:
+      context: ./python_workers
+      dockerfile: Dockerfile
+    container_name: car_bot_python_workers
+    command: python -m workers.main
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BROKERS: kafka:29092
+      # Chrome/Scraper settings
+      CHROME_HEADLESS: ${CHROME_HEADLESS:-true}  # Set to 'false' for visible mode
+      CHROME_USER_AGENT: ${CHROME_USER_AGENT:-}
+      # Proxy settings (optional)
+      PROXY_HOST: ${PROXY_HOST:-}
+      PROXY_PORT: ${PROXY_PORT:-}
+      PROXY_USERNAME: ${PROXY_USERNAME:-}
+      PROXY_PASSWORD: ${PROXY_PASSWORD:-}
+    volumes:
+      - ./python_workers:/app
+    depends_on:
+      - redis
+      - kafka
+    shm_size: '2gb'  # For Chrome/Selenium
+    # Для не-headless режима может потребоваться X11 forwarding (для локальной разработки)
+    # network_mode: host  # Раскомментируйте если нужен доступ к localhost прокси
+
+
+  kafka_consumer:
+    build:
+      context: ./rails_api
+      dockerfile: Dockerfile
+    container_name: car_bot_kafka_consumer
+    command: sh -c "bundle exec rails db:prepare && bundle exec rake kafka:consumer"
+    environment:
+      DATABASE_URL: postgresql://car_bot:car_bot_password@postgres:5432/car_bot_development
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BROKERS: kafka:29092
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      RAILS_ENV: development
+    volumes:
+      - ./rails_api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      rails_api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
