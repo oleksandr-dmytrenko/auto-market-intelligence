@@ -14,12 +14,21 @@ module Api
       latest_sale = result&.dig(:latest_sale)
       latest_sale_data = begin
         if latest_sale && latest_sale.respond_to?(:stock_number)
+          auction_end_date = latest_sale.auction_end_date
+          auction_end_date_str = if auction_end_date.respond_to?(:iso8601)
+            auction_end_date.iso8601
+          elsif auction_end_date.present?
+            auction_end_date.to_s
+          else
+            nil
+          end
+          
           {
             stock_number: latest_sale.stock_number,
             lot_id: latest_sale.source_id,
             source: latest_sale.source,
             final_price: latest_sale.final_price&.to_f,
-            auction_end_date: latest_sale.auction_end_date&.iso8601
+            auction_end_date: auction_end_date_str
           }
         else
           nil
@@ -57,12 +66,21 @@ module Api
       latest_sale = result&.dig(:latest_sale)
       latest_sale_data = begin
         if latest_sale && latest_sale.respond_to?(:stock_number)
+          auction_end_date = latest_sale.auction_end_date
+          auction_end_date_str = if auction_end_date.respond_to?(:iso8601)
+            auction_end_date.iso8601
+          elsif auction_end_date.present?
+            auction_end_date.to_s
+          else
+            nil
+          end
+          
           {
             stock_number: latest_sale.stock_number,
             lot_id: latest_sale.source_id,
             source: latest_sale.source,
             final_price: latest_sale.final_price&.to_f,
-            auction_end_date: latest_sale.auction_end_date&.iso8601
+            auction_end_date: auction_end_date_str
           }
         else
           nil
@@ -74,7 +92,7 @@ module Api
       
       render json: {
         fingerprint: result&.dig(:fingerprint) || fingerprint,
-        filters: filters,
+        filters: filters.stringify_keys,
         lots: result&.dig(:lots) || [],
         statistics: {
           total_sales: result&.dig(:total_sales) || 0,
