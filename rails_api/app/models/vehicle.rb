@@ -202,23 +202,53 @@ class Vehicle < ApplicationRecord
     return unless saved_change_to_auction_status?
     
     status_change = saved_change_to_auction_status
-    old_status = status_change ? status_change[0] : nil
-    new_status = status_change ? status_change[1] : auction_status
+    # Handle both array format [old, new] and edge cases
+    if status_change.is_a?(Array) && status_change.length >= 2
+      old_status = status_change[0]
+      new_status = status_change[1]
+    else
+      # Fallback for edge cases
+      old_status = nil
+      new_status = auction_status
+    end
     
     return unless new_status.present?
     
     price_change = saved_change_to_price
-    old_price = price_change ? price_change[0] : price
-    new_price = price_change ? price_change[1] : price
+    old_price = if price_change.is_a?(Array) && price_change.length >= 2
+                  price_change[0]
+                else
+                  price
+                end
+    new_price = if price_change.is_a?(Array) && price_change.length >= 2
+                  price_change[1]
+                else
+                  price
+                end
     
-    AuctionStatusHistory.create!(
-      vehicle: self,
-      old_status: old_status,
-      new_status: new_status,
-      price_before: old_price,
-      price_after: new_price,
-      changed_at: status_changed_at || Time.current
-    )
+    # Use a separate transaction to ensure history creation failures don't affect vehicle save
+    begin
+      ActiveRecord::Base.transaction(requires_new: true) do
+        history = AuctionStatusHistory.new(
+          vehicle: self,
+          old_status: old_status,
+          new_status: new_status,
+          price_before: old_price,
+          price_after: new_price,
+          changed_at: status_changed_at || Time.current
+        )
+        
+        unless history.save
+          Rails.logger.error("Failed to create AuctionStatusHistory: #{history.errors.full_messages.join(', ')}")
+          raise ActiveRecord::Rollback
+        end
+      end
+    rescue => e
+      Rails.logger.error("Failed to create AuctionStatusHistory: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n"))
+      # Don't re-raise to prevent transaction failure
+      # The history record is not critical for the vehicle save operation
+    end
     
     if new_status.in?(%w[sold not_sold buy_now completed]) && old_status != new_status
       download_images_async
