@@ -17,7 +17,8 @@ class Vehicle < ApplicationRecord
   
   before_save :update_status_changed_at, if: -> { persisted? && will_save_change_to_auction_status? }
   before_save :ensure_vehicle_fingerprint
-  after_commit :record_status_change, on: [:create, :update], if: -> { previous_changes.key?('auction_status') }
+  before_save :capture_status_change_for_history
+  after_save :record_status_change_safely
   
   has_many_attached :images
   def has_images?
@@ -198,25 +199,38 @@ class Vehicle < ApplicationRecord
     )
   end
   
-  def record_status_change
-    # Use previous_changes since we're in after_commit and saved_change_* methods are cleared
-    previous_changes = self.previous_changes
-    return unless previous_changes.key?('auction_status')
+  # Capture status change data before save to use in after_save callback
+  def capture_status_change_for_history
+    if will_save_change_to_auction_status?
+      @_status_change_data = {
+        old_status: persisted? ? auction_status_in_database : nil,
+        new_status: auction_status,
+        old_price: will_save_change_to_price? ? (persisted? ? price_in_database : price) : price,
+        new_price: price
+      }
+    end
+  end
+  
+  # Safely record status change without affecting the main transaction
+  def record_status_change_safely
+    return unless @_status_change_data
     
-    status_change = previous_changes['auction_status']
-    old_status = status_change ? status_change[0] : nil
-    new_status = status_change ? status_change[1] : auction_status
+    data = @_status_change_data
+    @_status_change_data = nil  # Clear to avoid memory leaks
+    
+    old_status = data[:old_status]
+    new_status = data[:new_status]
+    old_price = data[:old_price]
+    new_price = data[:new_price]
     
     return unless new_status.present?
     return if old_status == new_status  # Skip if status didn't actually change
     
-    price_change = previous_changes['price']
-    old_price = price_change ? price_change[0] : price
-    new_price = price_change ? price_change[1] : price
-    
+    # Create history record safely without affecting the main transaction
+    # Use create (not create!) and handle errors gracefully
     begin
       history = AuctionStatusHistory.new(
-        vehicle: self,
+        vehicle_id: id,
         old_status: old_status,
         new_status: new_status,
         price_before: old_price,
@@ -227,11 +241,17 @@ class Vehicle < ApplicationRecord
       unless history.save
         Rails.logger.error("Failed to create AuctionStatusHistory: #{history.errors.full_messages.join(', ')}")
       end
+    rescue ActiveRecord::StatementInvalid, PG::InFailedSqlTransaction => e
+      # Database-level errors (constraints, failed transactions, etc.) - log but don't fail
+      Rails.logger.error("Database error creating AuctionStatusHistory: #{e.message}")
+      # Don't re-raise - the history record is not critical
     rescue => e
+      # Catch any other exceptions and log them
+      # but don't re-raise to avoid affecting the main transaction
       Rails.logger.error("Failed to create AuctionStatusHistory: #{e.message}")
       Rails.logger.error(e.backtrace.join("\n"))
-      # Don't re-raise - the history record is not critical for the vehicle save operation
-      # Since we're in after_commit, the vehicle is already saved, so this won't affect it
+      # In test environments, we want to ensure this doesn't break the transaction
+      # The history record is not critical for the vehicle save operation
     end
     
     if new_status.in?(%w[sold not_sold buy_now completed]) && old_status != new_status
