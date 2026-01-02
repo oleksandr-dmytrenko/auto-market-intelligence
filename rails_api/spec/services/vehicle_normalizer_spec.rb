@@ -80,3 +80,4 @@ RSpec.describe VehicleNormalizer do
 end
 
 
+

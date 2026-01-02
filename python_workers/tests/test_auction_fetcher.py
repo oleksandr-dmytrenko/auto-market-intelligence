@@ -44,3 +44,4 @@ class TestAuctionFetcher:
             assert isinstance(result, list)
 
 
+

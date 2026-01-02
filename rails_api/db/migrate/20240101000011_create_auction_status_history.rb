@@ -15,3 +15,4 @@ class CreateAuctionStatusHistory < ActiveRecord::Migration[7.1]
 end
 
 
+

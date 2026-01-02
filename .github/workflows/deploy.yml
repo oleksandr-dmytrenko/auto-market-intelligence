@@ -1,0 +1,177 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  RAILS_ENV: production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install Kamal
+        run: gem install kamal
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: secrets.DOCKER_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Rails API image
+        working-directory: ./rails_api
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t $DOCKER_USERNAME/rails_api:latest \
+            --push .
+
+      - name: Deploy with Kamal
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        working-directory: ./rails_api
+        run: |
+          mkdir -p .kamal
+          echo "$DEPLOY_SSH_KEY" > .kamal/id_rsa
+          chmod 600 .kamal/id_rsa
+          
+          # Set up secrets file
+          cat > .kamal/secrets <<EOF
+          RAILS_MASTER_KEY=$RAILS_MASTER_KEY
+          DATABASE_URL=$DATABASE_URL
+          REDIS_URL=$REDIS_URL
+          KAFKA_BROKERS=$KAFKA_BROKERS
+          TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          DOCKER_USERNAME=$DOCKER_USERNAME
+          DOCKER_PASSWORD=$DOCKER_PASSWORD
+          EOF
+          
+          # Update deploy.yml with Docker username for image name
+          sed -i "s|image: rails_api|image: $DOCKER_USERNAME/rails_api|g" config/deploy.yml
+          
+          kamal setup
+          kamal deploy
+
+  deploy-python-workers:
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: secrets.DOCKER_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Python workers image
+        working-directory: ./python_workers
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t ${{ secrets.DOCKER_USERNAME }}/python_workers:latest \
+            --push .
+
+      - name: Deploy Python workers
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/auto-market-intelligence || mkdir -p /opt/auto-market-intelligence && cd /opt/auto-market-intelligence
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "docker-compose.prod.yml not found. Please copy it to the VPS first."
+              exit 1
+            fi
+            docker-compose -f docker-compose.prod.yml pull python_workers
+            docker-compose -f docker-compose.prod.yml up -d python_workers
+
+  deploy-telegram-bot:
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: secrets.DOCKER_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Telegram bot image
+        working-directory: ./telegram_bot
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -t ${{ secrets.DOCKER_USERNAME }}/telegram_bot:latest \
+            --push .
+
+      - name: Deploy Telegram bot
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/auto-market-intelligence || mkdir -p /opt/auto-market-intelligence && cd /opt/auto-market-intelligence
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "docker-compose.prod.yml not found. Please copy it to the VPS first."
+              exit 1
+            fi
+            docker-compose -f docker-compose.prod.yml pull telegram_bot
+            docker-compose -f docker-compose.prod.yml up -d telegram_bot
+

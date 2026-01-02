@@ -17,3 +17,4 @@ class AuctionStatusHistory < ApplicationRecord
 end
 
 
+

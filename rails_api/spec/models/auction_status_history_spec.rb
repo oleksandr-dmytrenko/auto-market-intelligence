@@ -36,3 +36,4 @@ RSpec.describe AuctionStatusHistory, type: :model do
 end
 
 
+

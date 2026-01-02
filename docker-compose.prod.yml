@@ -1,0 +1,60 @@
+services:
+  python_workers:
+    image: ${DOCKER_USERNAME:-yourusername}/python_workers:latest
+    container_name: car_bot_python_workers
+    restart: unless-stopped
+    command: python -m workers.main
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
+      CHROME_HEADLESS: ${CHROME_HEADLESS:-true}
+      CHROME_USER_AGENT: ${CHROME_USER_AGENT:-}
+      PROXY_HOST: ${PROXY_HOST:-}
+      PROXY_PORT: ${PROXY_PORT:-}
+      PROXY_USERNAME: ${PROXY_USERNAME:-}
+      PROXY_PASSWORD: ${PROXY_PASSWORD:-}
+    networks:
+      - kamal
+    depends_on:
+      - redis
+      - kafka
+    shm_size: '2gb'
+
+  telegram_bot:
+    image: ${DOCKER_USERNAME:-yourusername}/telegram_bot:latest
+    container_name: car_bot_telegram
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      RAILS_API_URL: ${RAILS_API_URL:-http://rails_api:3000}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINI_APP_URL: ${MINI_APP_URL:-https://bidly.tech/mini-app}
+    networks:
+      - kamal
+    depends_on:
+      - rails_api
+      - redis
+
+  kafka_consumer:
+    image: ${DOCKER_USERNAME:-yourusername}/rails_api:latest
+    container_name: car_bot_kafka_consumer
+    restart: unless-stopped
+    command: sh -c "bundle exec rails db:migrate && bundle exec rake kafka:consumer"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:29092}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      RAILS_ENV: production
+    networks:
+      - kamal
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - rails_api
+
+networks:
+  kamal:
+    external: true
+

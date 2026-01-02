@@ -50,3 +50,4 @@ RSpec.describe VehicleFingerprint do
 end
 
 
+

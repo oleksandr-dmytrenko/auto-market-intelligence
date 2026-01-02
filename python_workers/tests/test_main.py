@@ -72,3 +72,4 @@ class TestWorker:
         worker.process_active_auction_job.assert_called_once_with(job_data)
 
 
+

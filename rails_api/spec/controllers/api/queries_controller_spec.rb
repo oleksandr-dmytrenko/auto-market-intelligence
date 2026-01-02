@@ -130,3 +130,4 @@ RSpec.describe Api::QueriesController, type: :controller do
 end
 
 
+

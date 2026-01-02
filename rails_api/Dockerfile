@@ -12,11 +12,17 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Copy dependency files
 COPY Gemfile Gemfile.lock ./
-RUN bundle install
+RUN bundle install --without development test
 
+# Copy application code
 COPY . .
+
+# Precompile assets (if using asset pipeline)
+# RUN bundle exec rails assets:precompile
 
 EXPOSE 3000
 
-CMD ["bundle", "exec", "rails", "s", "-b", "0.0.0.0"]
+# Use Puma for production
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]

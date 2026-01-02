@@ -249,6 +249,33 @@ bundle exec rspec
 - `MINI_APP_URL` - URL Mini App для Telegram
 - `CHROME_HEADLESS` - Запуск Chrome в headless режиме (true/false)
 
+## Развертывание (Deployment)
+
+Приложение настроено для развертывания на VPS через GitHub Actions.
+
+**Домен:** `bidly.tech` (HTTPS обязателен для Telegram Mini App)
+
+### Быстрый старт
+
+См. [QUICK_START_DEPLOY.md](./QUICK_START_DEPLOY.md) для быстрого руководства по развертыванию.
+
+### Настройка домена
+
+См. [DOMAIN_SETUP.md](./DOMAIN_SETUP.md) для подробной инструкции по настройке домена `bidly.tech`.
+
+### Подробная документация
+
+См. [DEPLOYMENT.md](./DEPLOYMENT.md) для полной документации по развертыванию.
+
+### Основные шаги
+
+1. Настройте DNS для домена `bidly.tech` (A-запись на IP вашего VPS)
+2. Настройте VPS сервер (см. `setup-vps.sh`)
+3. Настройте SSL сертификат (через Hestia CP/aaPanel или Kamal)
+4. Настройте GitHub Secrets (включая `DEPLOY_DOMAIN=bidly.tech`)
+5. Настройте `rails_api/config/deploy.yml` (домен уже указан по умолчанию)
+6. Запушите код в GitHub - развертывание произойдет автоматически
+
 ## Лицензия
 
 [Укажите лицензию проекта]

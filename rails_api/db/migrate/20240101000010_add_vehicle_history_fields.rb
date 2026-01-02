@@ -20,3 +20,4 @@ class AddVehicleHistoryFields < ActiveRecord::Migration[7.1]
 end
 
 
+

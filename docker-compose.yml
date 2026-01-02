@@ -103,7 +103,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       RAILS_API_URL: http://rails_api:3000
       REDIS_URL: redis://redis:6379/0
-      MINI_APP_URL: ${MINI_APP_URL:-https://03c85b9da6bc.ngrok-free.app/mini-app}
+      MINI_APP_URL: ${MINI_APP_URL:-https://bidly.tech/mini-app}
     volumes:
       - ./telegram_bot:/app
       - .:/workspace:ro

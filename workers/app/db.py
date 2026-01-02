@@ -35,3 +35,4 @@ def fetch_search_query(search_query_id: int) -> dict | None:
 
 
 
+

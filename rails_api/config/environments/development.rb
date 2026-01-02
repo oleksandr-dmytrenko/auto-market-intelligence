@@ -73,8 +73,11 @@ Rails.application.configure do
   config.hosts << "rails_api"
   config.hosts << "localhost"
   
-  # Allow requests from ngrok tunnels (for Mini App testing)
-  config.hosts << "03c85b9da6bc.ngrok-free.app"
+  # Allow requests from production domain
+  config.hosts << "bidly.tech"
+  config.hosts << "www.bidly.tech"
+  
+  # Allow requests from ngrok tunnels (for local Mini App testing)
   config.hosts << /.*\.ngrok-free\.app/
   config.hosts << /.*\.ngrok\.io/
 
