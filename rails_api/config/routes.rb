@@ -17,5 +17,12 @@ Rails.application.routes.draw do
     get 'vehicles/by-fingerprint', to: 'vehicles#by_fingerprint'
     get 'vehicles/by-stock/:source/:stock_number', to: 'vehicles#by_stock'
     get 'vehicles/by-lot/:source/:lot_id', to: 'vehicles#by_lot'
+    
+    # Payment endpoints
+    post 'payments', to: 'payments#create'
+    get 'payments/:id', to: 'payments#show'
+    get 'payments/:id/result', to: 'payments#result'
+    post 'payments/:id/callback', to: 'payments#callback'
+    get 'payments/history', to: 'payments#history'
   end
 end

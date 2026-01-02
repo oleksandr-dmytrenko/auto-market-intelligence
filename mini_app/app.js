@@ -47,6 +47,13 @@ function initializeApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
     const userId = urlParams.get('user_id');
+    const paymentId = urlParams.get('payment_id');
+    
+    // Handle payment result callback
+    if (paymentId) {
+        checkPaymentStatus(paymentId);
+        return;
+    }
     
     if (type === 'premium' || type === 'single_search') {
         paymentType = type;
@@ -69,6 +76,34 @@ function initializeApp() {
         });
 
     setupFormHandlers();
+}
+
+async function checkPaymentStatus(paymentId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/payments/${paymentId}/result`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            tg.showAlert(data.message || 'Оплата успешно завершена!');
+            // Close mini app or redirect to main screen
+            setTimeout(() => {
+                tg.close();
+            }, 2000);
+        } else {
+            tg.showAlert('Оплата не завершена. Попробуйте еще раз.');
+            setTimeout(() => {
+                hideLoading();
+                showSearchScreen();
+            }, 2000);
+        }
+    } catch (error) {
+        console.error('Error checking payment status:', error);
+        tg.showAlert('Ошибка проверки статуса оплаты');
+        setTimeout(() => {
+            hideLoading();
+            showSearchScreen();
+        }, 2000);
+    }
 }
 
 function setupFormHandlers() {
@@ -394,20 +429,63 @@ function showPaymentScreen(type) {
     showScreen('payment');
 }
 
-function processPayment(type, amount) {
+async function processPayment(type, amount) {
     const user = tg.initDataUnsafe?.user;
     const userId = user?.id || tg.initDataUnsafe?.user_id;
 
-    tg.sendData(JSON.stringify({
-        type: 'payment_complete',
-        payment_type: type,
-        amount: amount,
-        transaction_id: 'test_' + Date.now(),
-        user_id: userId
-    }));
+    if (!userId) {
+        tg.showAlert('Ошибка: не удалось определить пользователя');
+        return;
+    }
 
-    tg.showAlert('Оплата успешно обработана!');
-    tg.close();
+    try {
+        // Show loading
+        const button = event?.target || document.querySelector('.btn-primary');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Обработка...';
+        }
+
+        // Create payment via API
+        const response = await fetch(`${API_BASE_URL}/api/payments`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-User-Id': userId.toString()
+            },
+            body: JSON.stringify({
+                payment_type: type,
+                amount: amount,
+                currency: 'USD',
+                telegram_id: userId,
+                username: user?.username
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Ошибка создания платежа');
+        }
+
+        const paymentData = await response.json();
+
+        // Redirect to LiqPay checkout
+        if (paymentData.checkout_url) {
+            window.location.href = paymentData.checkout_url;
+        } else {
+            throw new Error('URL оплаты не получен');
+        }
+    } catch (error) {
+        console.error('Payment error:', error);
+        tg.showAlert(`Ошибка: ${error.message}`);
+        
+        // Re-enable button
+        const button = event?.target || document.querySelector('.btn-primary');
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Оплатить';
+        }
+    }
 }
 
 function initiatePaymentFromVehicle() {

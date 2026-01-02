@@ -10,6 +10,7 @@ gem "rack-cors"
 gem "jbuilder", "~> 2.11"
 gem "bootsnap", ">= 1.4.4", require: false
 gem "bcrypt", "~> 3.1.7"
+gem "liqpay", "~> 2.0"
 
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
