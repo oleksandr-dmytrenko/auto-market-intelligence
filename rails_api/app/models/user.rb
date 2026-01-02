@@ -1,5 +1,6 @@
 class User < ApplicationRecord
   has_many :payments, dependent: :destroy
+  has_many :vehicle_alerts, dependent: :destroy
 
   validates :telegram_id, presence: true, uniqueness: true
 

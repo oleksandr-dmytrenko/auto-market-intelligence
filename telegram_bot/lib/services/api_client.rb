@@ -53,6 +53,58 @@ module Services
       { success: false, error: e.message }
     end
 
+    def get_vehicle_alerts(telegram_id)
+      response = self.class.get('/api/vehicle_alerts', 
+        query: { telegram_id: telegram_id.to_s },
+        timeout: 10
+      )
+      
+      if response.success?
+        parsed = response.parsed_response || {}
+        { success: true, alerts: parsed['alerts'] || [] }
+      else
+        { success: false, error: "HTTP #{response.code}" }
+      end
+    rescue => e
+      { success: false, error: e.message }
+    end
+
+    def create_vehicle_alert(telegram_id, alert_params)
+      options = {
+        body: { 
+          alert: alert_params,
+          telegram_id: telegram_id.to_s
+        }.to_json,
+        headers: { 
+          'Content-Type' => 'application/json'
+        },
+        timeout: 20
+      }
+      
+      response = self.class.post('/api/vehicle_alerts', options)
+      
+      if response.success?
+        parsed = response.parsed_response || {}
+        { success: true, alert: parsed['alert'] }
+      else
+        parsed = response.parsed_response || {}
+        { success: false, error: parsed['errors'] || "HTTP #{response.code}" }
+      end
+    rescue => e
+      { success: false, error: e.message }
+    end
+
+    def delete_vehicle_alert(telegram_id, alert_id)
+      response = self.class.delete("/api/vehicle_alerts/#{alert_id}",
+        query: { telegram_id: telegram_id.to_s },
+        timeout: 10
+      )
+      
+      { success: response.success? }
+    rescue => e
+      { success: false, error: e.message }
+    end
+
     private
 
     def get_data(endpoint, query_params, key)

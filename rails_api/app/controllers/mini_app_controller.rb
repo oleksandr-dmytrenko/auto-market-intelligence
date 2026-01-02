@@ -29,6 +29,13 @@ class MiniAppController < ApplicationController
     file_path = Pathname.new('/mini_app').join(file_name)
     
     if File.exist?(file_path)
+      # Prevent caching in development
+      if Rails.env.development?
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+      end
+      
       send_file file_path, 
         type: content_type,
         disposition: 'inline',

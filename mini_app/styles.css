@@ -255,6 +255,18 @@ input:disabled, select:disabled {
     display: flex;
     gap: 8px;
     margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.main-menu {
+    margin-bottom: 20px;
 }
 
 .btn-small {

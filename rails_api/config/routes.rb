@@ -24,5 +24,8 @@ Rails.application.routes.draw do
     get 'payments/:id/result', to: 'payments#result'
     post 'payments/:id/callback', to: 'payments#callback'
     get 'payments/history', to: 'payments#history'
+    
+    # Vehicle alerts endpoints
+    resources :vehicle_alerts, only: [:index, :show, :create, :update, :destroy]
   end
 end

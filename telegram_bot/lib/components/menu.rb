@@ -9,7 +9,9 @@ module Components
           { text: "🔔 Уведомления", callback_data: "notifications" }
         ],
         [
-          { text: "💳 Оплата", callback_data: "payments" },
+          { text: "💳 Оплата", callback_data: "payments" }
+        ],
+        [
           { text: "ℹ️ Помощь", callback_data: "help" }
         ]
       ]
@@ -22,7 +24,9 @@ module Components
           { text: "❌ Выключить уведомления", callback_data: "notifications:disable" }
         ],
         [
-          { text: "⚙️ Настройки", callback_data: "notifications:settings" },
+          { text: "📋 Мои уведомления", callback_data: "notifications:list" }
+        ],
+        [
           { text: "⬅️ Назад", callback_data: "main_menu" }
         ]
       ]
@@ -43,6 +47,18 @@ module Components
 
     def self.back_to_menu_button
       [[{ text: "🏠 Главное меню", callback_data: "main_menu" }]]
+    end
+
+    def self.vehicle_alerts_menu
+      [
+        [
+          { text: "➕ Создать запрос", callback_data: "vehicle_alerts:create" },
+          { text: "📋 Мои запросы", callback_data: "vehicle_alerts:list" }
+        ],
+        [
+          { text: "⬅️ Назад", callback_data: "main_menu" }
+        ]
+      ]
     end
 
     private

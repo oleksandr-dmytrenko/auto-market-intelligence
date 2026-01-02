@@ -27,6 +27,10 @@ module Handlers
         show_notifications_menu(chat_id)
       when /^notifications:(.+)$/
         handle_notification_action(chat_id, user_id, $1, callback.id)
+      when 'vehicle_alerts'
+        show_vehicle_alerts_menu(chat_id, user_id)
+      when /^vehicle_alerts:(.+)$/
+        handle_vehicle_alert_action(chat_id, user_id, $1, callback.id)
       when 'payments'
         show_payments_menu(chat_id)
       when /^payments:(.+)$/
@@ -71,12 +75,43 @@ module Handlers
       
       case action
       when 'enable'
-        state_manager.update_state(user_id, { notifications_enabled: true })
+        # Open Mini App with alert creation form
+        # State will be enabled automatically when user saves the alert
+        mini_app_url = build_mini_app_url('alerts', user_id)
+        
+        # Answer callback without showing alert
         @bot.api.answer_callback_query(
           callback_query_id: callback_id,
-          text: "✅ Уведомления включены"
+          show_alert: false
         )
-        show_notifications_menu(chat_id)
+        
+        # Edit the current message to show web_app button instead of sending new message
+        # This makes the transition smoother
+        begin
+          keyboard = [
+            [
+              { text: "🔔 Настроить фильтры", web_app: { url: mini_app_url } }
+            ],
+            Components::Menu.back_to_menu_button.first
+          ]
+          
+          @bot.api.edit_message_reply_markup(
+            chat_id: chat_id,
+            message_id: callback.message.message_id,
+            reply_markup: build_keyboard(keyboard)
+          )
+        rescue => e
+          # If editing fails, send new message with web_app button
+          puts "⚠️ Could not edit message: #{e.message}"
+          keyboard = [
+            [
+              { text: "🔔 Настроить фильтры", web_app: { url: mini_app_url } }
+            ],
+            Components::Menu.back_to_menu_button.first
+          ]
+          
+          send_message(chat_id, "🔔 Нажмите кнопку ниже для настройки фильтров:", keyboard, parse_mode: 'HTML')
+        end
       when 'disable'
         state_manager.update_state(user_id, { notifications_enabled: false })
         @bot.api.answer_callback_query(
@@ -86,7 +121,35 @@ module Handlers
         show_notifications_menu(chat_id)
       when 'settings'
         show_notification_settings(chat_id, user_id)
+      when 'list'
+        list_vehicle_alerts(chat_id, user_id)
       end
+    end
+
+    def list_vehicle_alerts(chat_id, user_id)
+      mini_app_url = build_mini_app_url('alerts', user_id)
+      
+      result = @api.get_vehicle_alerts(user_id)
+      alerts_count = result[:success] ? result[:alerts]&.length || 0 : 0
+      
+      if alerts_count > 0
+        text = "📋 <b>Мои уведомления</b>\n\n" \
+               "У вас #{alerts_count} #{alerts_count == 1 ? 'уведомление' : 'уведомлений'}.\n\n" \
+               "Откройте Mini App для просмотра и управления уведомлениями."
+      else
+        text = "📋 <b>Мои уведомления</b>\n\n" \
+               "У вас пока нет уведомлений.\n\n" \
+               "Откройте Mini App для создания нового уведомления."
+      end
+      
+      keyboard = [
+        [
+          { text: "🔔 Открыть уведомления", web_app: { url: mini_app_url } }
+        ],
+        Components::Menu.back_to_menu_button.first
+      ]
+      
+      send_message(chat_id, text, keyboard, parse_mode: 'HTML')
     end
 
     def show_notification_settings(chat_id, user_id)
@@ -183,10 +246,67 @@ module Handlers
       send_message(chat_id, text, keyboard, parse_mode: 'HTML')
     end
 
+    def show_vehicle_alerts_menu(chat_id, user_id)
+      text = "🚨 <b>Уведомления о машинах</b>\n\n" \
+             "Создайте запрос на поиск автомобиля. Мы уведомим вас, когда появится подходящий вариант.\n\n" \
+             "Срок действия запроса: 1 неделя"
+      
+      keyboard = Components::Menu.vehicle_alerts_menu
+      send_message(chat_id, text, keyboard, parse_mode: 'HTML')
+    end
+
+    def handle_vehicle_alert_action(chat_id, user_id, action, callback_id)
+      case action
+      when 'create'
+        start_vehicle_alert_creation(chat_id, user_id)
+      when 'create_new'
+        start_vehicle_alert_creation(chat_id, user_id)
+      when 'list'
+        list_vehicle_alerts(chat_id, user_id)
+      when 'manage'
+        show_vehicle_alerts_menu(chat_id, user_id)
+      when /^delete:(.+)$/
+        delete_vehicle_alert(chat_id, user_id, $1, callback_id)
+      end
+    end
+
+    def start_vehicle_alert_creation(chat_id, user_id)
+      mini_app_url = build_mini_app_url('alerts', user_id)
+      
+      text = "🔔 <b>Управление уведомлениями</b>\n\n" \
+             "Откройте Mini App для создания и управления уведомлениями о новых автомобилях."
+      
+      keyboard = [
+        [
+          { text: "🔔 Открыть уведомления", web_app: { url: mini_app_url } }
+        ],
+        Components::Menu.back_to_menu_button.first
+      ]
+      
+      send_message(chat_id, text, keyboard, parse_mode: 'HTML')
+    end
+
+    def delete_vehicle_alert(chat_id, user_id, alert_id, callback_id)
+      result = @api.delete_vehicle_alert(user_id, alert_id)
+      
+      if result[:success]
+        @bot.api.answer_callback_query(
+          callback_query_id: callback_id,
+          text: "✅ Запрос удален"
+        )
+        list_vehicle_alerts(chat_id, user_id)
+      else
+        @bot.api.answer_callback_query(
+          callback_query_id: callback_id,
+          text: "❌ Ошибка при удалении"
+        )
+      end
+    end
+
     def show_help(chat_id)
       text = "ℹ️ <b>Помощь</b>\n\n" \
              "🔍 <b>Подобрать авто</b> - найдите автомобиль по параметрам\n" \
-             "🔔 <b>Уведомления</b> - управление уведомлениями о новых лотах\n" \
+             "🔔 <b>Уведомления</b> - создайте уведомления о новых автомобилях с фильтрами\n" \
              "💳 <b>Оплата</b> - покупка подписок и разовых поисков\n\n" \
              "Используйте кнопки меню для навигации."
       

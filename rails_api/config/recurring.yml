@@ -31,9 +31,21 @@ production:
   process_recheck_queue:
     command: "python -m workers.periodic_recheck_worker --mode queue --max-items 50"
     schedule: every 30 minutes
+  
+  # Проверка уведомлений о машинах каждые 15 минут
+  check_vehicle_alerts:
+    class: CheckVehicleAlertsJob
+    queue: default
+    schedule: every 15 minutes
 
 development:
   # В development режиме запускаем реже
   process_recheck_queue:
     command: "python -m workers.periodic_recheck_worker --mode queue --max-items 10"
+    schedule: every hour
+  
+  # Проверка уведомлений о машинах в development
+  check_vehicle_alerts:
+    class: CheckVehicleAlertsJob
+    queue: default
     schedule: every hour

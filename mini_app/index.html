@@ -21,6 +21,12 @@
             <div class="container">
                 <h1>🔍 Подбор автомобиля</h1>
                 
+                <div class="main-menu">
+                    <button class="btn btn-secondary" onclick="showAlertsScreen()" style="margin-bottom: 15px; width: 100%;">
+                        🔔 Мои уведомления
+                    </button>
+                </div>
+                
                 <form id="search-form" class="search-form">
                     <div class="form-group">
                         <label for="make">Марка</label>
@@ -105,6 +111,94 @@
                 <div id="payment-content">
                     <!-- Payment content will be inserted here -->
                 </div>
+            </div>
+        </div>
+
+        <!-- Alerts list screen -->
+        <div id="alerts-screen" class="screen">
+            <div class="container">
+                <div class="header">
+                    <button class="btn-back" onclick="showSearchScreen()">← Назад</button>
+                    <h2>🔔 Мои уведомления</h2>
+                </div>
+                <div id="alerts-list" class="alerts-list">
+                    <!-- Alerts will be inserted here -->
+                </div>
+                <div id="no-alerts" class="no-results" style="display: none;">
+                    <p>У вас пока нет уведомлений.</p>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="showCreateAlertScreen()" style="width: 100%;">
+                        ➕ Создать уведомление
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create/Edit Alert screen -->
+        <div id="alert-form-screen" class="screen">
+            <div class="container">
+                <div class="header">
+                    <button class="btn-back" onclick="showAlertsScreen()">← Назад</button>
+                    <h2 id="alert-form-title">Создать уведомление</h2>
+                </div>
+                <form id="alert-form" class="search-form">
+                    <div class="form-group">
+                        <label for="alert-make">Марка *</label>
+                        <select id="alert-make" required>
+                            <option value="">Выберите марку</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="alert-model">Модель *</label>
+                        <select id="alert-model" required disabled>
+                            <option value="">Сначала выберите марку</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="alert-year-from">Год от</label>
+                            <input type="number" id="alert-year-from" min="1900" max="2025" placeholder="2015">
+                        </div>
+                        <div class="form-group">
+                            <label for="alert-year-to">Год до</label>
+                            <input type="number" id="alert-year-to" min="1900" max="2025" placeholder="2024">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="alert-damage-type">Тип повреждения</label>
+                        <select id="alert-damage-type">
+                            <option value="">Любой</option>
+                            <option value="none">Без повреждений</option>
+                            <option value="minor">Незначительные</option>
+                            <option value="moderate">Умеренные</option>
+                            <option value="severe">Серьезные</option>
+                            <option value="total">Тотальная потеря</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="alert-mileage-min">Пробег от (миль)</label>
+                            <input type="number" id="alert-mileage-min" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="alert-mileage-max">Пробег до (миль)</label>
+                            <input type="number" id="alert-mileage-max" min="0" placeholder="100000">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="font-size: 12px; color: var(--tg-theme-hint-color, #999999); margin-top: 10px;">
+                        * Уведомление будет действовать 1 неделю
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="alert-submit-btn">
+                        Сохранить уведомление
+                    </button>
+                </form>
             </div>
         </div>
     </div>

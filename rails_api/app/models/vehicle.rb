@@ -19,6 +19,7 @@ class Vehicle < ApplicationRecord
   before_save :ensure_vehicle_fingerprint
   before_save :capture_status_change_for_history
   after_save :record_status_change_safely
+  after_commit :check_vehicle_alerts, on: [:create, :update], if: -> { auction_status.in?(%w[active upcoming]) }
   
   has_many_attached :images
   def has_images?
@@ -257,6 +258,11 @@ class Vehicle < ApplicationRecord
     if new_status.in?(%w[sold not_sold buy_now completed]) && old_status != new_status
       download_images_async
     end
+  end
+
+  def check_vehicle_alerts
+    # Check alerts asynchronously for new/updated active vehicles
+    VehicleAlertCheckJob.perform_later(id) if auction_status.in?(%w[active upcoming])
   end
 end
 
